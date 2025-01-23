@@ -3,7 +3,9 @@ import pandas as pd
 from statsmodels.stats.contingency_tables import mcnemar
 
 
-def assess_impact_hypotheses(df, alpha=0.05, exact_thresh=25):
+def assess_impact_hypotheses(
+    df, alpha=0.05, exact_thresh=25, group_name="practitioners"
+):
     """Analysis of the impact of the device on practitioners' performance"""
     total = df.shape[0]
 
@@ -29,7 +31,7 @@ def assess_impact_hypotheses(df, alpha=0.05, exact_thresh=25):
     )
 
     # McNemar's Test
-    # If the diagonal is equal or less than 25
+    # If the diagonal (b + c) is equal or less than 25
     # then apply the Exact McNemar test (Binomial distribution)
     if np.diag(data).sum() < exact_thresh:
         result = mcnemar(data, exact=True, correction=False)
@@ -64,11 +66,11 @@ def assess_impact_hypotheses(df, alpha=0.05, exact_thresh=25):
 
     # Percentage of cases that are correct without and with device
     reinforcement_rate = data[0, 0] / total
-    print(f"- Reinforcement of practitioners' performance: {reinforcement_rate:.2%}")
+    print(f"- Reinforcement of {group_name}' performance: {reinforcement_rate:.2%}")
 
     # Percentage of cases that are incorrect without device and correct with device
     correction_rate = data[1, 0] / total
-    print(f"- Improvement of practitioners' performance: {correction_rate:.2%}")
+    print(f"- Improvement of {group_name}' performance: {correction_rate:.2%}")
 
     # Percentage of cases that are incorrect without device and with device
     double_failure_rate = data[1, 1] / total
@@ -129,6 +131,34 @@ def assess_impact_on_pathology(df):
     return result
 
 
+def compute_performance_change(df):
+    """Relative performance change before and after using the device"""
+    stage_performance = {}
+    for stage in ["before", "after"]:
+        col_name = f"Is correct {stage} device"
+        new_col_name = f"Record count {stage} device"
+        rate_table = (
+            df[col_name]
+            .value_counts()
+            .to_frame(new_col_name)
+            .reset_index()
+            .assign(Rate=lambda x: x[new_col_name] / x[new_col_name].sum() * 100)
+            .round(2)
+        )
+
+        print(rate_table)
+        stage_performance[stage] = rate_table.loc[
+            rate_table[col_name] == "correct", "Rate"
+        ].values[0]
+
+    # Relative change
+    performance_change = (
+        abs(stage_performance["before"] - stage_performance["after"])
+        / stage_performance["before"]
+    )
+    return performance_change
+
+
 if __name__ == "__main__":
 
     # Loading the data
@@ -162,7 +192,7 @@ if __name__ == "__main__":
     )
     # Number of images analyzed per specialty
     # Both images are analyzed by both specialties
-    print("\nNumber of images analyzed per specialty")
+    print("\nNumber of images analyzed per specialty:\n")
     print(
         df_result[["Specialty", "Image"]]
         .drop_duplicates()["Specialty"]
@@ -172,66 +202,39 @@ if __name__ == "__main__":
     )
 
     # Get overall % of accuracy
-    for stage in ["before", "after"]:
-        col_name = f"Is correct {stage} device"
-        new_col_name = f"Record count {stage} device"
-        print(
-            df_result[col_name]
-            .value_counts()
-            .to_frame(new_col_name)
-            .reset_index()
-            .assign(Rate=lambda x: x[new_col_name] / x[new_col_name].sum() * 100)
-            .round(2)
-        )
+    print("\nComputing the overall impact on accuracy:\n")
+    overall_change = compute_performance_change(df_result)
+    print(f"Overall accuracy change: {overall_change:.2%}\n")
 
     ######################################################################
     # Analysis of the impact of the device on practitioners' performance #
     ######################################################################
 
+    print("Assessing the experiment hypotheses for HCPs:")
     assess_impact_hypotheses(df_result)
 
     # Analysis per pathology
-    for pathology in df_result["Correct condition"].unique():
-        # Get total rows (values)
-        df_result_pathology = df_result.query("`Correct condition`==@pathology")
-        assess_impact_hypotheses(df_result_pathology)
+    # for pathology in df_result["Correct condition"].unique():
+    #     # Get total rows (values)
+    #     df_result_pathology = df_result.query("`Correct condition`==@pathology")
+    #     assess_impact_hypotheses(df_result_pathology)
 
     # Analysis per specialty
     specialty_dict = {"Medicina general": "PCP", "Dermatología": "Dermatologist"}
     specialty_list = df_result["Specialty"].unique()
     for specialty in specialty_list:
-        print(f"\nAssessing performance of: {specialty}\n")
-
+        print(f"\nAssessing performance of: {specialty_dict[specialty]}\n")
         df_result_specialty = df_result.query("Specialty==@specialty")
 
         # Get % of accuracy by specialty
-        print(
-            df_result_specialty["Is correct before device"]
-            .value_counts()
-            .to_frame("Record count before device")
-            .reset_index()
-            .assign(
-                Rate=lambda x: x["Record count before device"]
-                / x["Record count before device"].sum()
-                * 100
-            )
-            .round(2)
-        )
-        print(
-            df_result_specialty["Is correct after device"]
-            .value_counts()
-            .to_frame("Record count after device")
-            .reset_index()
-            .assign(
-                Rate=lambda x: x["Record count after device"]
-                / x["Record count after device"].sum()
-                * 100
-            )
-            .round(2)
-        )
+        print(f"\nComputing the impact on {specialty_dict[specialty]} accuracy:\n")
+        specialty_change = compute_performance_change(df_result_specialty)
+        print(f"{specialty_dict[specialty]} accuracy change: {specialty_change:.2%}")
 
         # P-values
-        assess_impact_hypotheses(df_result_specialty)
+        assess_impact_hypotheses(
+            df_result_specialty, group_name=specialty_dict[specialty]
+        )
 
         # Uncomment this part if you want to get the p-values per pathology
         # for pathology in df_result_specialty["Correct condition"].unique():
@@ -248,6 +251,7 @@ if __name__ == "__main__":
     export_cols = ["Correct condition", "Rate_before_device", "Rate_after_device"]
 
     # All pathologies and specialties
+    print("\nHCP accuracy per pathology\n")
     hcp_table = assess_impact_on_pathology(df_result)
     hcp_table = hcp_table.query("`Is correct after device`=='correct'")
     hcp_table.sort_values(by="Correct condition", inplace=True)
@@ -255,7 +259,7 @@ if __name__ == "__main__":
 
     # Per specialty
     for specialty in specialty_list:
-        print("\nAssessing performance impact per pathology: ", specialty)
+        print(f"\n{specialty_dict[specialty]} accuracy per pathology\n")
         df_result_specialty = df_result.query("Specialty==@specialty")
         specialty_table = assess_impact_on_pathology(df_result_specialty)
         specialty_table = specialty_table.query("`Is correct after device`=='correct'")
