@@ -1,6 +1,6 @@
 # Evaluating diagnostic accuracy of generalized pustular psoriasis (GPP) with the Legit.Health device
 
-[<img src="figures/Legit_Health_logo.png" width="500" height="70" />](https://legit.health/)
+[<img src="figures/LegitHealth-logo.png" width="500" height="70" />](https://legit.health/)
 
 This is the Python code used for the analysis presented in "Evaluating diagnostic accuracy of generalized pustular psoriasis with the Legit.Health device".
 
