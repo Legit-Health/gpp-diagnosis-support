@@ -162,7 +162,7 @@ def compute_performance_change(df):
 if __name__ == "__main__":
 
     # Loading the data
-    df_result = pd.read_csv("data/BI_results_data.csv")
+    df_result = pd.read_csv("data/participants_data.csv")
 
     # Number of images
     n_images = df_result["Image"].nunique()
